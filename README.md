@@ -60,7 +60,7 @@ Before starting, make sure you have:
 ### 1️⃣ Download the project
 Open your terminal and clone the repository:
 ```bash
-git clone [https://github.com](https://github.com/JakubDr/neon-arcade)
+git clone https://github.com/JakubDr/neon-arcade
 ```
 
 Enter the project directory:
