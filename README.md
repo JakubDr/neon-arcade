@@ -60,7 +60,7 @@ Before starting, make sure you have:
 ### 1️⃣ Download the project
 Open your terminal and clone the repository:
 ```bash
-git clone https://github.com/YOUR-USERNAME/neon-arcade.git
+git clone https://github.com
 ```
 
 Enter the project directory:
@@ -255,7 +255,7 @@ Potential future improvements:
 ---
 
 ### ❤️ Enjoy the game?
-If you like the project, consider giving it a ⭐ on GitHub!
+If you like the project, consider giving it a ⭐ on [GitHub](https://github.com/JakubDr/neon-arcade)!
 
 ---
 <p align="center">
