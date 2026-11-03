@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYBER ARENA 2.0</title>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#050713;color:#eafaff;font-family:Arial,sans-serif;overflow:hidden}
+canvas{display:block;width:100vw;height:100vh;cursor:crosshair}
+#hud{position:fixed;inset:0;pointer-events:none}
+.logo{position:absolute;top:20px;left:25px;font-size:23px;font-weight:1000;letter-spacing:4px;color:#00f5ff;text-shadow:0 0 20px #00eaff}
+.logo small{display:block;font-size:9px;letter-spacing:5px;color:#ff3d91;margin-top:5px}
+.panel{background:#0b1425dd;border:1px solid #1d5268;border-radius:9px;backdrop-filter:blur(12px);box-shadow:0 0 25px #00dfff0c}
+#leader{position:absolute;right:20px;top:20px;width:230px;padding:15px}
+h3{font-size:11px;letter-spacing:3px;color:#00eaff;margin:0 0 12px}
+.row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #193044;font-size:12px}
+#playerhud{position:absolute;bottom:22px;left:25px;width:270px;padding:15px}
+.bar{height:9px;background:#26354a;border-radius:10px;margin:7px 0 12px;overflow:hidden}
+.fill{height:100%;width:100%;transition:width .15s}
+#hp{background:linear-gradient(90deg,#00d99b,#00efff)}
+#shield{background:linear-gradient(90deg,#6d5cff,#d66cff)}
+.stat{font-size:10px;color:#a5bfd0;letter-spacing:2px}
+#weapons{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.weapon{padding:11px 15px;font-size:10px;letter-spacing:1px;color:#91aabe}
+.weapon.active{border-color:#00eaff;color:#00f5ff;box-shadow:0 0 15px #00eaff44}
+#help{position:absolute;bottom:24px;right:22px;text-align:right;color:#91aabe;font-size:10px;line-height:1.8}
+#notice{position:absolute;top:27%;width:100%;text-align:center;color:#ff4b9a;font-size:25px;font-weight:bold;text-shadow:0 0 20px #ff398b}
+#crosshair{position:absolute;width:20px;height:20px;border:1px solid #00f5ff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:.5}
+#overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#11263d,#050713 70%)}
+.menu{width:min(470px,92vw);padding:35px;background:#0b1425f2;border:1px solid #00dff0;border-radius:13px;box-shadow:0 0 70px #00dfff24;text-align:center}
+.menu h1{font-size:38px;letter-spacing:5px;color:#00f5ff;text-shadow:0 0 25px #00eaff;margin:5px}
+.menu h2{font-size:12px;color:#ff438e;letter-spacing:6px;margin:8px 0 25px}
+.menu p{color:#a4b9ca;font-size:13px;line-height:1.7}
+input{width:100%;padding:14px;margin:15px 0;background:#050c18;border:1px solid #31556a;border-radius:6px;color:white;font-size:16px}
+button{width:100%;padding:15px;border:0;border-radius:6px;background:linear-gradient(100deg,#00d8e9,#00ffa8);color:#04121a;font-weight:900;letter-spacing:2px;cursor:pointer}
+button:hover{filter:brightness(1.2);box-shadow:0 0 25px #00eaff77}
+#connection{margin-top:18px;font-size:10px;color:#8199ac;letter-spacing:2px}
+#round{position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:10px;color:#8ca8bb;letter-spacing:3px}
+#dash{color:#00eaff}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+ <div class="logo">CYBER ARENA <small>NEON WARFARE // 2.0</small></div>
+ <div id="round">MULTIPLAYER • LIVE</div>
+ <div id="leader" class="panel"><h3>◈ LEADERBOARD</h3><div id="scores">Čekám na hráče...</div></div>
+ <div id="playerhud" class="panel">
+  <div class="stat" id="hptext">HEALTH 100</div>
+  <div class="bar"><div class="fill" id="hp"></div></div>
+  <div class="stat" id="shieldtext">SHIELD 0</div>
+  <div class="bar"><div class="fill" id="shield"></div></div>
+  <div class="stat" id="weapontext">WEAPON: LASER</div>
+  <div class="stat" id="dash">DASH: READY [SPACE]</div>
+ </div>
+ <div id="weapons">
+  <div class="weapon panel active" id="w1">1 • LASER</div>
+  <div class="weapon panel" id="w2">2 • SHOTGUN</div>
+  <div class="weapon panel" id="w3">3 • RAPID</div>
+ </div>
+ <div id="help">W A S D — POHYB<br>MYŠ — MÍŘENÍ<br>LEVÉ TLAČÍTKO — STŘELBA<br>SPACE — DASH<br>1 / 2 / 3 — ZBRANĚ</div>
+ <div id="notice"></div>
+ <div id="crosshair"></div>
+</div>
+<div id="overlay">
+ <div class="menu">
+  <h1>CYBER ARENA</h1><h2>NEON WARFARE 2.0</h2>
+  <p>Vstup do futuristické arény.<br>Poraz soupeře, sbírej bonusy a ovládni bojiště.</p>
+  <input id="name" maxlength="16" placeholder="Tvoje přezdívka" value="Player">
+  <button id="play">VSTOUPIT DO ARÉNY</button>
+  <div id="connection">CONNECTING TO LOCAL SERVER...</div>
+ </div>
+</div>
+<script>
+const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+const W=1200,H=750;
+let players=[],bullets=[],pickups=[],effects=[],myId=null,joined=false;
+let keys={},mouse={x:600,y:375},fire=false,weapon="laser",dash=false;
+let particles=[],lastFrame=0;
+function resize(){canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0)}
+addEventListener("resize",resize);resize();
+
+const walls=[
+{x:220,y:130,w:110,h:110},{x:870,y:130,w:110,h:110},
+{x:220,y:510,w:110,h:110},{x:870,y:510,w:110,h:110},
+{x:510,y:250,w:180,h:75},{x:510,y:425,w:180,h:75}
+];
+const socket=io();
+function escapeHTML(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+socket.on("connect",()=>document.getElementById("connection").textContent="● SERVER ONLINE");
+socket.on("connect_error",()=>document.getElementById("connection").textContent="SERVER CONNECTION ERROR");
+socket.on("joined",d=>{myId=d.id;joined=true;document.getElementById("overlay").style.display="none"});
+socket.on("state",s=>{
+ players=s.players;bullets=s.bullets;pickups=s.pickups;effects=s.effects;
+ const me=players.find(p=>p.id===myId);
+ if(me){
+  document.getElementById("hp").style.width=me.hp+"%";
+  document.getElementById("shield").style.width=me.shield+"%";
+  document.getElementById("hptext").textContent="HEALTH "+me.hp;
+  document.getElementById("shieldtext").textContent="SHIELD "+me.shield;
+  document.getElementById("weapontext").textContent="WEAPON: "+me.weapon.toUpperCase();
+  document.getElementById("dash").textContent=me.dash_cooldown>0?"DASH: "+me.dash_cooldown.toFixed(1)+"s":"DASH: READY [SPACE]";
+ }
+ document.getElementById("scores").innerHTML=players.slice().sort((a,b)=>b.score-a.score).map(p=>
+ `<div class="row"><span style="color:${p.color}">${escapeHTML(p.name)}</span><b>${p.kills} K / ${p.deaths} D</b></div>`).join("")||"Čekám na hráče...";
+});
+socket.on("notice",d=>{
+ const n=document.getElementById("notice");n.textContent=d.text;
+ setTimeout(()=>{if(n.textContent===d.text)n.textContent=""},1600);
+});
+document.getElementById("play").onclick=()=>{
+ if(!socket.connected){alert("Server není připojen.");return}
+ socket.emit("join",{name:document.getElementById("name").value});
+};
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();keys[k]=true;
+ if([" ","arrowup","arrowdown"].includes(k))e.preventDefault();
+ if(k==="1"||k==="2"||k==="3"){
+  weapon={1:"laser",2:"shotgun",3:"rapid"}[k];
+  document.querySelectorAll(".weapon").forEach((el,i)=>el.classList.toggle("active",i===Number(k)-1));
+ }
+ if(k===" ")dash=true;
+});
+addEventListener("keyup",e=>{keys[e.key.toLowerCase()]=false;if(e.key===" ")dash=false});
+canvas.addEventListener("mousemove",e=>{
+ const r=canvas.getBoundingClientRect();
+ mouse.x=(e.clientX-r.left)*W/r.width;
+ mouse.y=(e.clientY-r.top)*H/r.height;
+ const ch=document.getElementById("crosshair");
+ ch.style.left=e.clientX+"px";ch.style.top=e.clientY+"px";
+});
+canvas.addEventListener("mousedown",e=>{if(e.button===0)fire=true});
+addEventListener("mouseup",()=>fire=false);
+addEventListener("blur",()=>{keys={};fire=false;dash=false});
+
+setInterval(()=>{
+ if(!joined)return;
+ const me=players.find(p=>p.id===myId);
+ if(!me)return;
+ socket.emit("input",{
+  w:keys.w,a:keys.a,s:keys.s,d:keys.d,
+  angle:Math.atan2(mouse.y-me.y,mouse.x-me.x),
+  fire,dash,weapon
+ });
+},30);
+
+function glow(color,blur){ctx.shadowColor=color;ctx.shadowBlur=blur}
+function background(t){
+ ctx.fillStyle="#050a16";ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle="#10243a";ctx.lineWidth=1;
+ for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+ for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+ for(let i=0;i<65;i++){
+  const x=(i*191)%W,y=(i*113)%H;
+  ctx.globalAlpha=.3+.3*Math.sin(t/600+i);
+  ctx.fillStyle="#22cde9";ctx.fillRect(x,y,2,2);
+ }
+ ctx.globalAlpha=1;
+ ctx.strokeStyle="#00dff5";ctx.lineWidth=3;glow("#00dff5",16);
+ ctx.strokeRect(2,2,W-4,H-4);ctx.shadowBlur=0;
+}
+function drawWalls(){
+ walls.forEach(w=>{
+  ctx.fillStyle="#111e32";ctx.fillRect(w.x,w.y,w.w,w.h);
+  ctx.strokeStyle="#1b8299";ctx.lineWidth=2;glow("#00c8e8",12);
+  ctx.strokeRect(w.x+3,w.y+3,w.w-6,w.h-6);ctx.shadowBlur=0;
+  ctx.fillStyle="#24506a";
+  for(let x=w.x+12;x<w.x+w.w-8;x+=20)ctx.fillRect(x,w.y+12,8,4);
+ });
+}
+function drawPickups(t){
+ pickups.forEach(p=>{
+  const color={health:"#00ff9d",shield:"#a56cff",speed:"#ffbd4a"}[p.kind];
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(t/500);
+  glow(color,20);ctx.fillStyle=color;
+  ctx.beginPath();ctx.moveTo(0,-13);ctx.lineTo(13,0);ctx.lineTo(0,13);ctx.lineTo(-13,0);ctx.closePath();ctx.fill();
+  ctx.restore();ctx.shadowBlur=0;
+ });
+}
+function drawPlayers(t){
+ players.forEach(p=>{
+  if(p.respawn>0)return;
+  ctx.save();ctx.translate(p.x,p.y);
+  glow(p.color,25);ctx.fillStyle=p.color;
+  ctx.beginPath();ctx.arc(0,0,17,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;ctx.fillStyle="#07111e";
+  ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.fill();
+  ctx.rotate(p.angle);glow(p.color,14);ctx.fillStyle=p.color;
+  ctx.fillRect(5,-5,27,10);ctx.restore();ctx.shadowBlur=0;
+  ctx.fillStyle="#1a293a";ctx.fillRect(p.x-23,p.y-33,46,6);
+  ctx.fillStyle=p.hp>35?"#00edaa":"#ff356a";
+  ctx.fillRect(p.x-23,p.y-33,46*p.hp/100,6);
+  if(p.shield>0){ctx.strokeStyle="#a56cff";ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,24,0,Math.PI*2);ctx.stroke()}
+  ctx.textAlign="center";ctx.font="bold 12px Arial";ctx.fillStyle="#e6faff";
+  ctx.fillText(p.name,p.x,p.y-42);
+  if(p.speed_boost>0){ctx.fillStyle="#ffbd4a";ctx.fillText("SPEED!",p.x,p.y+38)}
+ });
+}
+function drawBullets(){
+ bullets.forEach(b=>{
+  ctx.save();ctx.strokeStyle=b.color;ctx.lineWidth=4;glow(b.color,18);
+  ctx.beginPath();ctx.arc(b.x,b.y,4,0,Math.PI*2);ctx.stroke();
+  ctx.restore();ctx.shadowBlur=0;
+ });
+}
+function drawEffects(t){
+ effects.forEach(e=>{
+  const r=(.25-e.life)*90;
+  ctx.beginPath();ctx.arc(e.x,e.y,Math.max(1,r),0,Math.PI*2);
+  ctx.strokeStyle=e.color;ctx.lineWidth=3;ctx.globalAlpha=Math.max(0,e.life*4);
+  glow(e.color,16);ctx.stroke();ctx.globalAlpha=1;ctx.shadowBlur=0;
+ });
+}
+function frame(t){
+ background(t);drawWalls();drawPickups(t);drawEffects(t);drawBullets();drawPlayers(t);
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
