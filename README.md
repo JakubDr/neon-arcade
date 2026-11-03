@@ -255,7 +255,7 @@ Potential future improvements:
 ---
 
 ### ❤️ Enjoy the game?
-If you like the project, consider giving it a ⭐ on [GitHub](https://github.com/JakubDr/neon-arcade)!
+If you like the project, consider giving it a ⭐ on GitHub!
 
 ---
 <p align="center">
