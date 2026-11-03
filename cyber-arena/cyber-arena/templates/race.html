@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEON RUSH 2.0</title>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#070a13;color:white;font-family:Arial,sans-serif;overflow:hidden}
+canvas{width:100vw;height:100vh;display:block}
+button,input{font:inherit}
+button{cursor:pointer;border:0}
+#hud{position:fixed;inset:0;pointer-events:none}
+.top{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 25px}
+.brand{font-size:23px;font-weight:900;letter-spacing:5px;color:#00eaff;text-shadow:0 0 20px #00eaff}
+.box{background:#101a30eF;border:1px solid #28465e;border-radius:10px;padding:12px 18px}
+#players{position:absolute;right:20px;top:85px;width:220px}
+.player{padding:10px 0;border-bottom:1px solid #29435b;font-size:13px}
+#status{position:absolute;top:100px;left:50%;transform:translateX(-50%);font-weight:bold;letter-spacing:4px;text-align:center;text-shadow:0 0 20px #ff398c;white-space:nowrap}
+#speed{position:absolute;bottom:75px;right:30px;font-size:40px;font-weight:bold;color:#00eaff;text-shadow:0 0 20px #00eaff;text-align:center}
+#speed small{display:block;font-size:10px;letter-spacing:4px;color:#91b8c7}
+#lap{position:absolute;bottom:75px;left:30px;font-size:27px;font-weight:bold}
+#lap small{display:block;font-size:10px;letter-spacing:3px;color:#8aa9bd}
+#controls{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-size:10px;color:#9bb1c7;letter-spacing:2px;text-align:center;white-space:nowrap}
+#connection{position:absolute;top:20px;right:25px;font-size:10px;color:#00efa9;letter-spacing:2px}
+#overlay{position:fixed;inset:0;z-index:5;background:#050918eF;display:flex;align-items:center;justify-content:center;padding:15px}
+.dialog{width:min(460px,100%);background:linear-gradient(145deg,#142039,#0b1020);border:1px solid #00dfff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 0 60px #00dfff25}
+h1{font-size:38px;letter-spacing:5px;color:#00eaff;text-shadow:0 0 22px #00eaff;margin:0 0 12px}
+h2{letter-spacing:3px;color:#ff4997}
+.description{font-size:13px;color:#a4b7cc;line-height:1.8;margin-bottom:22px}
+input{width:100%;padding:15px;background:#070d1a;color:white;border:1px solid #36506b;border-radius:7px;margin:8px 0 15px;outline:none}
+input:focus{border-color:#00eaff}
+.primary{width:100%;padding:16px;background:linear-gradient(90deg,#00dff0,#00e9a5);color:#07101a;font-weight:900;letter-spacing:2px;border-radius:7px;margin-top:8px}
+.secondary{width:100%;padding:14px;background:#202c44;color:white;border:1px solid #405674;border-radius:7px;margin-top:10px}
+#message{font-size:12px;color:#91b1c5;margin-top:16px;min-height:17px}
+.hidden{display:none!important}
+.result{font-size:18px;margin:20px 0;color:#fff}
+.result strong{color:#00eaff;font-size:28px;display:block;margin:10px}
+.stats{display:flex;justify-content:space-around;background:#080e1c;padding:16px;border-radius:8px;margin:20px 0}
+.stats b{display:block;font-size:20px;color:#00eaff}
+.stats small{font-size:9px;letter-spacing:2px;color:#92a9bf}
+@media(max-width:600px){
+ .brand{font-size:17px}.top{padding:12px}
+ #players{top:65px;right:8px;width:145px;padding:8px}
+ #speed{right:12px;font-size:27px;bottom:65px}
+ #lap{left:12px;bottom:65px;font-size:21px}
+ #status{top:75px;font-size:12px}
+ #controls{font-size:8px}
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+ <div class="top">
+  <div class="brand">NEON RUSH <span style="font-size:11px;color:#ff4897">2.0</span></div>
+  <div class="box" style="font-size:11px;letter-spacing:2px">MULTIPLAYER</div>
+ </div>
+ <div id="connection">● CONNECTING</div>
+ <div id="status">PŘIPRAVUJE SE ZÁVOD</div>
+ <div id="players" class="box"></div>
+ <div id="lap"><small>TVÁ KOLA</small><span id="lapValue">0 / 3</span></div>
+ <div id="speed"><span id="speedValue">0</span><small>KM/H</small></div>
+ <div id="controls">WASD / ŠIPKY — POHYB &nbsp; • &nbsp; SPACE — DRIFT</div>
+</div>
+
+<div id="overlay">
+ <div class="dialog" id="joinScreen">
+  <h1>NEON RUSH</h1>
+  <h2>RACING 2.0</h2>
+  <div class="description">
+   Vítej na neonovém závodním okruhu.<br>
+   Poraz soupeře ve třech kolech!
+  </div>
+  <input id="name" maxlength="16" value="Racer" placeholder="Tvoje přezdívka">
+  <button class="primary" id="join">VSTOUPIT DO ZÁVODU</button>
+  <div id="message">Připojuji se k serveru...</div>
+  <button class="secondary" onclick="location.href='/'">ZPĚT DO MENU</button>
+ </div>
+
+ <div class="dialog hidden" id="resultScreen">
+  <h1 id="resultTitle">VÝSLEDEK</h1>
+  <div class="result" id="resultText"></div>
+  <div class="stats">
+   <div><b id="resultLap">3/3</b><small>KOLA</small></div>
+   <div><b id="resultPlace">1.</b><small>POŘADÍ</small></div>
+  </div>
+  <button class="primary" id="rematch">↻ JEDEM ZNOVU</button>
+  <div id="rematchMessage" class="description" style="margin:14px 0 0">Čekejte na další závod.</div>
+  <button class="secondary" id="menuButton">HLAVNÍ MENU</button>
+ </div>
+</div>
+
+<script>
+const socket=io();
+const canvas=document.getElementById("c");
+const ctx=canvas.getContext("2d");
+const W=1200,H=750;
+
+let cars=[];
+let me=null;
+let joined=false;
+let started=false;
+let finished=false;
+let winner=null;
+let keys={};
+let state=null;
+let restartSent=false;
+let mySpeed=0;
+
+function resize(){
+ canvas.width=innerWidth*devicePixelRatio;
+ canvas.height=innerHeight*devicePixelRatio;
+ ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+}
+addEventListener("resize",resize);
+resize();
+
+const $=id=>document.getElementById(id);
+
+socket.on("connect",()=>{
+ $("connection").textContent="● SERVER ONLINE";
+ $("connection").style.color="#00efa9";
+ $("message").textContent="Server je připraven.";
+});
+
+socket.on("disconnect",()=>{
+ $("connection").textContent="● ODPOJENO";
+ $("connection").style.color="#ff477d";
+ $("message").textContent="Spojení se serverem bylo přerušeno.";
+});
+
+socket.on("connect_error",()=>{
+ $("message").textContent="Nelze se připojit k serveru.";
+});
+
+$("join").onclick=()=>{
+ if(!socket.connected){
+  $("message").textContent="Server není dostupný.";
+  return;
+ }
+ if(joined)return;
+ $("message").textContent="Přihlašování...";
+ socket.emit("race_join",{name:$("name").value.trim()||"Racer"});
+};
+
+socket.on("race_joined",d=>{
+ me=d.id;
+ joined=true;
+ $("joinScreen").classList.add("hidden");
+ $("overlay").classList.add("hidden");
+});
+
+socket.on("race_notice",d=>{
+ $("status").textContent=d.text;
+});
+
+socket.on("race_state",s=>{
+ state=s;
+ cars=s.players||[];
+ started=s.started;
+ finished=s.finished;
+ winner=s.winner;
+
+ const mine=cars.find(p=>p.id===me);
+ if(mine){
+  $("lapValue").textContent=Math.min(mine.lap,3)+" / 3";
+  mySpeed=Math.round(Math.abs(mine.speed)*.48);
+  $("speedValue").textContent=mySpeed;
+ }
+
+ $("players").innerHTML=cars.map(p=>
+  `<div class="player" style="color:${p.color}">
+   <b>${p.place}. ${escapeHtml(p.name)}</b>
+   <div style="color:#9bb0c5;margin-top:5px">${Math.min(p.lap,3)} / 3 KOLA ${p.finished?" • CÍL":""}</div>
+  </div>`
+ ).join("") || "Čekáme na závodníky";
+
+ if(cars.length<2){
+  $("status").textContent="ČEKÁNÍ NA DRUHÉHO HRÁČE";
+ }else if(s.countdown>0){
+  $("status").textContent="START ZA "+s.countdown;
+ }else if(s.started&&!s.finished){
+  $("status").textContent="ZÁVOD PROBÍHÁ";
+ }
+
+ if(s.finished&&!$("resultScreen").classList.contains("hidden")){
+  return;
+ }
+
+ if(s.finished){
+  showResult(s);
+ }else if(s.started||s.countdown>0){
+  $("overlay").classList.add("hidden");
+  $("joinScreen").classList.add("hidden");
+ }
+});
+
+socket.on("race_winner",d=>{
+ winner=d.name;
+});
+
+function escapeHtml(s){
+ return String(s).replace(/[&<>"']/g,c=>({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+ }[c]));
+}
+
+function showResult(s){
+ const mine=cars.find(p=>p.id===me);
+ const won=s.winner===mine?.name;
+ $("resultTitle").textContent=won?"🏆 VÍTĚZSTVÍ!":"ZÁVOD DOKONČEN";
+ $("resultText").innerHTML=won
+  ?"Gratulujeme!<strong>"+escapeHtml(s.winner)+"</strong>vyhrál závod!"
+  :"Vítězem závodu se stal:<strong>"+escapeHtml(s.winner||"Neznámý hráč")+"</strong>";
+ $("resultLap").textContent=mine?Math.min(mine.lap,3)+"/3":"-";
+ $("resultPlace").textContent=mine?(mine.place+"."):"-";
+ $("rematchMessage").textContent="Klepni na odvetu a připrav další závod.";
+ $("rematch").disabled=false;
+ $("rematch").textContent="↻ JEDEM ZNOVU";
+ $("resultScreen").classList.remove("hidden");
+ $("joinScreen").classList.add("hidden");
+ $("overlay").classList.remove("hidden");
+}
+
+$("rematch").onclick=()=>{
+ if(!joined||!socket.connected)return;
+ if(restartSent)return;
+ restartSent=true;
+ $("rematch").disabled=true;
+ $("rematch").textContent="PŘIPRAVUJE SE...";
+ $("rematchMessage").textContent="Nový závod se připravuje...";
+ socket.emit("race_restart");
+};
+
+$("menuButton").onclick=()=>{
+ socket.emit("race_leave");
+ location.href="/";
+};
+
+function track(){
+ ctx.fillStyle="#101923";
+ ctx.fillRect(0,0,W,H);
+
+ for(let i=0;i<150;i++){
+  ctx.fillStyle=i%2?"#172735":"#111e2b";
+  ctx.fillRect((i*173)%W,(i*97)%H,3,3);
+ }
+
+ ctx.fillStyle="#263342";
+ ctx.beginPath();ctx.ellipse(600,375,445,295,0,0,Math.PI*2);ctx.fill();
+
+ ctx.fillStyle="#111c27";
+ ctx.beginPath();ctx.ellipse(600,375,390,245,0,0,Math.PI*2);ctx.fill();
+
+ ctx.fillStyle="#14231f";
+ ctx.beginPath();ctx.ellipse(600,375,300,155,0,0,Math.PI*2);ctx.fill();
+
+ ctx.strokeStyle="#738594";
+ ctx.lineWidth=2;
+ ctx.setLineDash([15,16]);
+ ctx.beginPath();ctx.ellipse(600,375,367,220,0,0,Math.PI*2);ctx.stroke();
+ ctx.setLineDash([]);
+
+ ctx.strokeStyle="#00eaff";
+ ctx.lineWidth=5;
+ ctx.shadowColor="#00eaff";ctx.shadowBlur=20;
+ ctx.beginPath();ctx.ellipse(600,375,445,295,0,0,Math.PI*2);ctx.stroke();
+
+ ctx.strokeStyle="#ff438e";
+ ctx.beginPath();ctx.ellipse(600,375,390,245,0,0,Math.PI*2);ctx.stroke();
+ ctx.shadowBlur=0;
+
+ // Startovní čára
+ ctx.save();
+ ctx.translate(600,130);
+ for(let i=0;i<8;i++){
+  for(let j=0;j<2;j++){
+   ctx.fillStyle=(i+j)%2?"#fff":"#17202c";
+   ctx.fillRect(i*7-28,j*12-12,7,12);
+  }
+ }
+ ctx.restore();
+
+ ctx.fillStyle="#647f91";
+ ctx.font="bold 12px Arial";
+ ctx.textAlign="center";
+ ctx.fillText("NEON CIRCUIT",600,375);
+}
+
+function drawCar(p){
+ ctx.save();
+ ctx.translate(p.x,p.y);
+ ctx.rotate(p.angle);
+
+ ctx.shadowColor=p.color;
+ ctx.shadowBlur=22;
+ ctx.fillStyle=p.color;
+ ctx.beginPath();
+ ctx.roundRect(-19,-10,38,20,6);
+ ctx.fill();
+ ctx.shadowBlur=0;
+
+ ctx.fillStyle="#15243b";
+ ctx.beginPath();ctx.roundRect(-7,-8,15,16,4);ctx.fill();
+
+ ctx.fillStyle="#e7faff";
+ ctx.fillRect(12,-7,4,5);
+ ctx.fillRect(12,2,4,5);
+
+ ctx.fillStyle="#ff3c76";
+ ctx.fillRect(-18,-7,3,5);
+ ctx.fillRect(-18,2,3,5);
+
+ ctx.fillStyle="#273342";
+ ctx.fillRect(-11,-13,9,4);
+ ctx.fillRect(7,-13,9,4);
+ ctx.fillRect(-11,9,9,4);
+ ctx.fillRect(7,9,9,4);
+
+ ctx.restore();
+
+ ctx.fillStyle="#fff";
+ ctx.font="bold 12px Arial";
+ ctx.textAlign="center";
+ ctx.fillText(p.name,p.x,p.y-23);
+}
+
+function render(){
+ track();
+ cars.forEach(drawCar);
+
+ if(state&&state.countdown>0){
+  ctx.fillStyle="#fff";
+  ctx.textAlign="center";
+  ctx.font="bold 105px Arial";
+  ctx.shadowColor="#ff4897";
+  ctx.shadowBlur=30;
+  ctx.fillText(state.countdown,600,395);
+  ctx.shadowBlur=0;
+ }
+
+ requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ keys[k]=true;
+ if([" ","arrowup","arrowdown","arrowleft","arrowright"].includes(k))e.preventDefault();
+});
+addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+addEventListener("blur",()=>keys={});
+
+setInterval(()=>{
+ if(!joined||!socket.connected)return;
+ socket.emit("race_input",{
+  up:!!(keys.w||keys.arrowup),
+  down:!!(keys.s||keys.arrowdown),
+  left:!!(keys.a||keys.arrowleft),
+  right:!!(keys.d||keys.arrowright),
+  drift:!!keys[" "]
+ });
+},30);
+
+// Automatické odemknutí další odvety po restartu serveru.
+setInterval(()=>{
+ if(state&&!state.finished&&state.countdown>0){
+  restartSent=false;
+  $("rematchMessage").textContent="Odveta se připravuje...";
+  $("rematch").disabled=true;
+  $("resultScreen").classList.add("hidden");
+  $("overlay").classList.add("hidden");
+ }
+ if(state&&state.started&&!state.finished){
+  restartSent=false;
+ }
+},200);
+
+</script>
+</body>
+</html>

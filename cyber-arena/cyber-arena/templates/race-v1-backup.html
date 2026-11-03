@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEON RUSH</title>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#070a16;color:white;font-family:Arial;overflow:hidden}
+canvas{width:100vw;height:100vh;display:block}
+#top{position:fixed;top:15px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 25px;pointer-events:none}
+.brand{color:#00eaff;font-size:22px;font-weight:900;letter-spacing:4px;text-shadow:0 0 15px #00eaff}
+.panel{background:#101a30eF;border:1px solid #29435b;border-radius:9px;padding:12px 18px}
+#status{position:fixed;top:75px;left:50%;transform:translateX(-50%);font-size:17px;font-weight:bold;letter-spacing:4px;text-shadow:0 0 20px #ff3d98;text-align:center}
+#players{position:fixed;top:70px;right:20px;width:200px}
+.player{padding:8px 0;border-bottom:1px solid #29435b;font-size:12px}
+#bottom{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;color:#a9bdd0;letter-spacing:2px;line-height:2}
+#menu{position:fixed;inset:0;background:#050918ed;display:flex;justify-content:center;align-items:center;z-index:5}
+.box{background:#101b31;border:1px solid #00dff0;box-shadow:0 0 60px #00dfff25;padding:35px;border-radius:14px;text-align:center;width:min(420px,92vw)}
+h1{font-size:38px;letter-spacing:5px;color:#ff4897;text-shadow:0 0 20px #ff4897}
+input{padding:14px;width:100%;background:#060c19;border:1px solid #34536a;color:white;margin:15px 0;font-size:16px;border-radius:6px}
+button{width:100%;padding:15px;background:linear-gradient(90deg,#ff398c,#a65aff);color:white;border:0;border-radius:6px;font-weight:bold;letter-spacing:2px;cursor:pointer}
+a{display:block;color:#00eaff;text-decoration:none;margin-top:20px;font-size:12px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top"><div class="brand">NEON RUSH</div><div class="panel">LAPS: <b>3</b></div></div>
+<div id="status">ČEKÁNÍ NA HRÁČE</div>
+<div id="players" class="panel"></div>
+<div id="bottom">W / ↑ — PLYN &nbsp; S / ↓ — BRZDA<br>A / ← — DOLEVA &nbsp; D / → — DOPRAVA<br>SPACE — DRIFT</div>
+<div id="menu"><div class="box">
+<h1>NEON RUSH</h1>
+<p>Multiplayer závod pro dva hráče.<br>První, kdo dokončí tři kola, vyhrává!</p>
+<input id="name" maxlength="16" value="Racer" placeholder="Přezdívka">
+<button id="join">VSTOUPIT DO ZÁVODU</button>
+<div id="msg" style="color:#9ab2c7;font-size:11px;margin-top:15px">Připojuji server...</div>
+<a href="/">← ZPĚT DO HLAVNÍHO MENU</a>
+</div></div>
+<script>
+const socket=io();
+const canvas=document.getElementById("c"),ctx=canvas.getContext("2d");
+const W=1200,H=750;
+let cars=[],me=null,countdown=0,started=false,finished=false,winner=null;
+let keys={},joined=false,lastState=null;
+function resize(){canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0)}
+addEventListener("resize",resize);resize();
+socket.on("connect",()=>document.getElementById("msg").textContent="SERVER ONLINE");
+socket.on("connect_error",()=>document.getElementById("msg").textContent="CHYBA PŘIPOJENÍ");
+socket.on("race_joined",d=>{
+ me=d.id;
+ joined=true;
+ document.getElementById("msg").textContent="Připojeno. Čekám na soupeře...";
+ document.getElementById("menu").style.display="none";
+});
+socket.on("race_notice",d=>{document.getElementById("status").textContent=d.text});
+socket.on("race_winner",d=>{winner=d.name;finished=true;document.getElementById("status").textContent="🏆 VÍTĚZ: "+d.name});
+socket.on("race_state",s=>{
+ lastState=s;cars=s.players;countdown=s.countdown;started=s.started;
+ if(s.finished){finished=true;winner=s.winner}
+ document.getElementById("players").innerHTML=cars.map(p=>
+ `<div class="player" style="color:${p.color}">${p.place}. ${p.name} — ${p.lap}/3 kol</div>`).join("")||"Čeká se na závodníky";
+ if(cars.length<2)document.getElementById("status").textContent="ČEKÁNÍ NA DRUHÉHO HRÁČE";
+ else if(countdown>0)document.getElementById("status").textContent="START ZA "+countdown;
+ else if(started&&!finished)document.getElementById("status").textContent="ZÁVOD PROBÍHÁ";
+});
+document.getElementById("join").onclick=()=>{
+ if(!socket.connected)return;
+ socket.emit("race_join",{name:document.getElementById("name").value});
+};
+addEventListener("keydown",e=>{
+ keys[e.key.toLowerCase()]=true;
+ if([" ","arrowup","arrowdown","arrowleft","arrowright"].includes(e.key.toLowerCase()))e.preventDefault();
+});
+addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+addEventListener("blur",()=>keys={});
+setInterval(()=>{
+ if(joined)socket.emit("race_input",{
+  up:keys.w||keys.arrowup,
+  down:keys.s||keys.arrowdown,
+  left:keys.a||keys.arrowleft,
+  right:keys.d||keys.arrowright,
+  drift:keys[" "]
+ });
+},30);
+function glow(color,n){ctx.shadowColor=color;ctx.shadowBlur=n}
+function track(){
+ ctx.fillStyle="#101a25";ctx.fillRect(0,0,W,H);
+ for(let i=0;i<100;i++){ctx.fillStyle=i%2?"#14212b":"#111e28";ctx.fillRect((i*173)%W,(i*97)%H,4,4)}
+ ctx.fillStyle="#172432";
+ ctx.beginPath();ctx.ellipse(600,375,445,295,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle="#263342";
+ ctx.beginPath();ctx.ellipse(600,375,390,245,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle="#10201f";
+ ctx.beginPath();ctx.ellipse(600,375,300,155,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle="#e6e7ee";ctx.lineWidth=3;ctx.setLineDash([18,18]);
+ ctx.beginPath();ctx.ellipse(600,375,367,220,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+ ctx.strokeStyle="#00eaff";ctx.lineWidth=5;glow("#00eaff",17);
+ ctx.beginPath();ctx.ellipse(600,375,445,295,0,0,Math.PI*2);ctx.stroke();
+ ctx.strokeStyle="#ff438e";ctx.beginPath();ctx.ellipse(600,375,390,245,0,0,Math.PI*2);ctx.stroke();
+ ctx.shadowBlur=0;
+ // Finish line
+ ctx.save();ctx.translate(600,130);
+ for(let i=0;i<8;i++)for(let j=0;j<2;j++){
+ ctx.fillStyle=(i+j)%2?"#fff":"#141824";ctx.fillRect(i*7-28,j*12-12,7,12)}
+ ctx.restore();
+ ctx.fillStyle="#648091";ctx.font="12px Arial";ctx.textAlign="center";ctx.fillText("NEON CIRCUIT",600,375);
+}
+function car(p){
+ ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.angle);
+ glow(p.color,22);
+ ctx.fillStyle=p.color;
+ ctx.beginPath();ctx.roundRect(-19,-10,38,20,6);ctx.fill();
+ ctx.shadowBlur=0;
+ ctx.fillStyle="#101a2a";ctx.beginPath();ctx.roundRect(-7,-8,15,16,4);ctx.fill();
+ ctx.fillStyle="#e7faff";ctx.fillRect(12,-7,4,5);ctx.fillRect(12,2,4,5);
+ ctx.fillStyle="#ff3c76";ctx.fillRect(-18,-7,3,5);ctx.fillRect(-18,2,3,5);
+ ctx.fillStyle="#263343";ctx.fillRect(-11,-13,9,4);ctx.fillRect(7,-13,9,4);
+ ctx.fillRect(-11,9,9,4);ctx.fillRect(7,9,9,4);
+ ctx.restore();
+ ctx.fillStyle="white";ctx.font="bold 12px Arial";ctx.textAlign="center";ctx.fillText(p.name,p.x,p.y-23);
+}
+function frame(t){
+ track();
+ cars.forEach(car);
+ if(countdown>0){ctx.fillStyle="#fff";ctx.textAlign="center";ctx.font="bold 100px Arial";glow("#ff4897",30);ctx.fillText(countdown,600,390);ctx.shadowBlur=0}
+ if(finished){ctx.fillStyle="#00eaff";ctx.font="bold 35px Arial";ctx.textAlign="center";glow("#00eaff",25);ctx.fillText("ZÁVOD DOKONČEN",600,470);ctx.shadowBlur=0}
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
